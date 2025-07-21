@@ -52,20 +52,17 @@ async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
         "Cookie": "__cf_bm=...your values...; __cfruid=...; _cfuvid=...",
     };
 
-    console.log("\n📤 Sending Request:");
-    console.log("URL:", url);
-    console.log("Headers:", headers);
-    console.log("Body:", "{}");
-
     try {
         const response = await axios.post(url, {}, { headers, timeout: 10000 });
 
         const dataWrapper = response.data;
-        const snippets = dataWrapper && dataWrapper.response && Array.isArray(dataWrapper.response.snippets) ?
-            dataWrapper.response.snippets :
+        const responseData = dataWrapper && dataWrapper.response;
+        const snippets = Array.isArray(responseData && responseData.snippets) ?
+            responseData.snippets :
             [];
 
-        for (const item of snippets) {
+        for (let i = 0; i < snippets.length; i++) {
+            const item = snippets[i];
             if (!item || !item.data) continue;
             const data = item.data;
 
@@ -75,6 +72,15 @@ async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
                 data.atc_action.add_to_cart.cart_item
             ) {
                 const cartItem = data.atc_action.add_to_cart.cart_item;
+
+                let isSponsored = 0;
+                if (
+                    item.tracking &&
+                    item.tracking.impression_map &&
+                    typeof item.tracking.impression_map.is_sponsored !== "undefined"
+                ) {
+                    isSponsored = item.tracking.impression_map.is_sponsored;
+                }
 
                 const row = {
                     date: new Date().toISOString().split("T")[0],
@@ -90,11 +96,7 @@ async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
                     mrp: cartItem.mrp || "",
                     in_stock: cartItem.inventory > 0 ? 1 : 0,
                     inventory: cartItem.inventory || 0,
-                    is_sponsored: item.tracking &&
-                        item.tracking.impression_map &&
-                        typeof item.tracking.impression_map.is_sponsored !== "undefined" ?
-                        item.tracking.impression_map.is_sponsored :
-                        0,
+                    is_sponsored: isSponsored,
                     image_url: cartItem.image_url || "",
                     brand_id: cartItem.brand || "",
                     brand: cartItem.brand || "",
@@ -104,10 +106,10 @@ async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
             }
         }
 
-        console.log(`✅ Processed: ${l1} → ${l2} @ (${lat}, ${lon})`);
+        console.log(`✅ Success: ${l1} → ${l2} @ (${lat}, ${lon})`);
     } catch (err) {
-        const errorStatus = err.response && err.response.status ? err.response.status : err.message;
-        console.error(`❌ Failed: ${l1} → ${l2} @ (${lat}, ${lon}) →`, errorStatus);
+        const errorStatus = (err.response && err.response.status) || err.message;
+        console.error(`❌ Failed: ${l1} → ${l2} @ (${lat}, ${lon}) → ${errorStatus}`);
     }
 }
 
@@ -123,19 +125,20 @@ async function main() {
 
     writeCSVHeaderIfNotExists();
 
-    for (const loc of locations) {
-        const { latitude: lat, longitude: lon } = loc;
+    for (let i = 0; i < locations.length; i++) {
+        const loc = locations[i];
+        const lat = loc.latitude;
+        const lon = loc.longitude;
 
-        for (const cat of categories) {
-            const {
-                l1_category: l1,
-                l2_category: l2,
-                l1_category_id: m1_cat,
-                l2_category_id: m2_cat
-            } = cat;
+        for (let j = 0; j < categories.length; j++) {
+            const cat = categories[j];
+            const l1 = cat.l1_category;
+            const l2 = cat.l2_category;
+            const m1_cat = cat.l1_category_id;
+            const m2_cat = cat.l2_category_id;
 
             await sendRequest(lat, lon, m1_cat, m2_cat, l1, l2);
-            await sleep(1200); // Delay to prevent 429s
+            await sleep(1200);
         }
     }
 }
