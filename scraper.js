@@ -1,7 +1,6 @@
 const fs = require("fs");
 const axios = require("axios");
 const csv = require("csv-parser");
-const path = require("path");
 
 const locations = [];
 const categories = [];
@@ -44,24 +43,27 @@ function appendToCSV(row) {
 
 // Step 4: Send API request and parse
 async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
-    const url = `https://blinkit.com/v1/layout/listing_widgets?m1_cat=${m1_cat}&m2_cat=${m2_cat}`;
+    const url = `https://blinkit.com/v1/layout/listing_widgets?l0_cat=${m1_cat}&l1_cat=${m2_cat}`;
+    const headers = {
+        "lat": lat,
+        "lon": lon,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "Cookie": "__cf_bm=...your values...; __cfruid=...; _cfuvid=...",
+    };
+
+    console.log("\n📤 Sending Request:");
+    console.log("URL:", url);
+    console.log("Headers:", headers);
+    console.log("Body:", "{}");
+
     try {
-        const response = await axios.post(
-            url, {}, {
-                headers: {
-                    "lat": lat,
-                    "lon": lon,
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0",
-                    "Cookie": "__cf_bm=...your values...; __cfruid=...; _cfuvid=...",
-                },
-                timeout: 10000,
-            }
-        );
+        const response = await axios.post(url, {}, { headers, timeout: 10000 });
 
         const dataWrapper = response.data;
         const snippets = dataWrapper && dataWrapper.response && Array.isArray(dataWrapper.response.snippets) ?
-            dataWrapper.response.snippets : [];
+            dataWrapper.response.snippets :
+            [];
 
         for (const item of snippets) {
             if (!item || !item.data) continue;
@@ -88,8 +90,11 @@ async function sendRequest(lat, lon, m1_cat, m2_cat, l1, l2) {
                     mrp: cartItem.mrp || "",
                     in_stock: cartItem.inventory > 0 ? 1 : 0,
                     inventory: cartItem.inventory || 0,
-                    is_sponsored: item.tracking && item.tracking.impression_map && typeof item.tracking.impression_map.is_sponsored !== "undefined" ?
-                        item.tracking.impression_map.is_sponsored : 0,
+                    is_sponsored: item.tracking &&
+                        item.tracking.impression_map &&
+                        typeof item.tracking.impression_map.is_sponsored !== "undefined" ?
+                        item.tracking.impression_map.is_sponsored :
+                        0,
                     image_url: cartItem.image_url || "",
                     brand_id: cartItem.brand || "",
                     brand: cartItem.brand || "",
@@ -130,12 +135,9 @@ async function main() {
             } = cat;
 
             await sendRequest(lat, lon, m1_cat, m2_cat, l1, l2);
-
-            // Delay after each API call to avoid 429
-            await sleep(1200); // Adjust to 500 or 1000 if still throttled
+            await sleep(1200); // Delay to prevent 429s
         }
     }
 }
-
 
 main();
